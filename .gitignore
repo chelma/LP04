@@ -1,0 +1,16 @@
+.DS_Store
+venv/
+*__pycache__*
+
+# Distro Packaging
+lp04/package/
+lp04/lp04/
+*.zip
+
+# Terraform stuff
+*.tfstate*
+*.terraform*
+
+# Logs
+*debug.log
+*info.log
