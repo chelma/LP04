@@ -41,21 +41,3 @@ store_refined_page_summary_tool = StructuredTool.from_function(
 )
 
 TOOLS_REFINEMENT = [store_refined_page_summary_tool]
-
-
-class StoreCombinedPageSummary(BaseModel):
-    """Stores the combined, summarized web page content"""
-    combined_text: str = Field(description="The combined, summarized text of the page")
-
-def store_combined_page_summary(combined_text: str) -> None:
-    # No-op; exists to provide a structured tool interface that forces the model to comform to the
-    # expected result format
-    return combined_text
-
-store_combined_page_summary_tool = StructuredTool.from_function(
-    func=store_combined_page_summary,
-    name="StoreCombinedPageSummary",
-    args_schema=StoreCombinedPageSummary
-)
-
-TOOLS_COMBINED = [store_combined_page_summary_tool]

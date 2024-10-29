@@ -3,7 +3,7 @@ import logging
 
 import click
 
-from summary_expert.chain import perform_initial_conversion, perform_conversion_qc, perform_initial_refinement, perform_refinement_qc, perform_combined_summary, SummarizationPass
+from summary_expert.chain import perform_initial_conversion_batched, perform_initial_refinement_batch, SummarizationPassBatch
 from utilities.logging import configure_logging
 from utilities.scraping import extract_text_from_page
 
@@ -28,61 +28,43 @@ def main(urls, output):
     page_results = []
     for page in scraped_pages:
         # 1st pass on converting the structured text to markdown
-        initial_state_conversion = SummarizationPass(
-            url=page.url,
-            text=json.dumps(page.content, indent=4),
-            turns=[]
-        )
-
         logger.info(f"1st pass on converting page: {page.url}")
-        pass_results = perform_initial_conversion(initial_state_conversion)
+        pass_results = perform_initial_conversion_batched(page)
         logger.debug(f"Conversion results: {pass_results.to_json()}")
 
-        # QC pass on the converting markdown
-        logger.info(f"QC pass on converting page: {page.url}")
-        pass_results = perform_conversion_qc(pass_results)
-        logger.debug(f"Conversion QC results: {pass_results.to_json()}")
-
         # 1st pass on refining the markdown summaries
-        initial_state_refinement = SummarizationPass(
-            url=page.url,
-            text=pass_results.text,
-            turns=[]
-        )
+        sections = [pass_result.text for pass_result in pass_results.passes]
         logger.info(f"1st pass on refining page: {page.url}")
-        pass_results = perform_initial_refinement(initial_state_refinement)
+        pass_results = perform_initial_refinement_batch(page.url, sections)
         logger.debug(f"Refinement results: {pass_results.to_json()}")
 
-        # QC pass on the refining summaries
-        logger.info(f"QC pass on refining page: {page.url}")
-        pass_results = perform_refinement_qc(pass_results)
-        logger.debug(f"Refinement QC results: {pass_results.to_json()}")
+        page_result = "\n".join([pass_result.text for pass_result in pass_results.passes])
 
-        page_results.append(pass_results)
+        page_results.append(page_result)
         logger.info(f"Summary completed for page: {page.url}")
-        logger.info(f"Final refined text: \n{pass_results.text}")
+        logger.info(f"Final refined text: \n{page_result}")
 
-    # Combine the summaries if there are multiple pages
-    final_summary = None
+    # # Combine the summaries if there are multiple pages
+    # final_summary = None
 
-    if len(page_results) > 1:
-        logger.info("Combining summaries...")
-        initial_state_combine = SummarizationPass(
-            url=None,
-            text=json.dumps([result.text for result in page_results]),
-            turns=[]
-        )
+    # if len(page_results) > 1:
+    #     logger.info("Combining summaries...")
+    #     initial_state_combine = SummarizationPass(
+    #         url=None,
+    #         text=json.dumps([result.text for result in page_results]),
+    #         turns=[]
+    #     )
 
-        combined_summary = perform_combined_summary(initial_state_combine)
-        logger.debug(f"Combined summary: \n{combined_summary.to_json()}")
+    #     combined_summary = perform_combined_summary(initial_state_combine)
+    #     logger.debug(f"Combined summary: \n{combined_summary.to_json()}")
 
-        final_summary = combined_summary.text
-    else:
-        final_summary = page_results[0].text
+    #     final_summary = combined_summary.text
+    # else:
+    #     final_summary = page_results[0].text
 
-    # Store the results in the output file
-    with open(output, 'w') as f:
-        f.write(final_summary)
+    # # Store the results in the output file
+    # with open(output, 'w') as f:
+    #     f.write(final_summary)
 
 if __name__ == '__main__':
     main()

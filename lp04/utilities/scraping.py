@@ -1,8 +1,7 @@
 from dataclasses import dataclass
-import json
 import logging
 import requests
-from typing import List, Dict
+from typing import Any, Dict
 
 from bs4 import BeautifulSoup
 
@@ -15,7 +14,7 @@ class ScrapingError(Exception):
 @dataclass
 class ScrapedPage:
     url: str
-    content: Dict
+    content: Dict[str, Any]
 
 def extract_text_from_page(url: str) -> ScrapedPage:
     try:
@@ -61,8 +60,11 @@ def extract_text_from_page(url: str) -> ScrapedPage:
                     table_data.append(row_data)
                 if current_heading:
                     page_structure[current_heading].append({'table': {'headers': headers, 'rows': table_data}})
+        
+        # Dump any sections that are empty
+        page_structure = {heading: content for heading, content in page_structure.items() if content}
 
-        logger.info(f"Extracted content from {url}: {json.dumps(page_structure, indent=4)}")
+        logger.info(f"Extracted content from {url}: {page_structure}")
         
         return ScrapedPage(url=url, content=page_structure)
     

@@ -12,7 +12,7 @@
             "console": "integratedTerminal",
             "args": [
                 "--urls",
-                "https://opensearch.org/docs/2.17/install-and-configure/configuring-opensearch/index-settings/",
+                "https://opensearch.org/docs/2.17/api-reference/index-apis/create-index/",
                 "--output",
                 "'../generated_summary.md'"
             ]
