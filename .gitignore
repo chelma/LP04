@@ -14,3 +14,6 @@ lp04/lp04/
 # Logs
 *debug.log
 *info.log
+
+# Testing stuff
+*generated_summary.md

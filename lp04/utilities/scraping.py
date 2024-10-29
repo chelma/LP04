@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+import json
 import logging
 import requests
 from typing import List, Dict
@@ -10,7 +12,12 @@ logger = logging.getLogger(__name__)
 class ScrapingError(Exception):
     pass
 
-def extract_text_from_page(url: str) -> Dict:
+@dataclass
+class ScrapedPage:
+    url: str
+    content: Dict
+
+def extract_text_from_page(url: str) -> ScrapedPage:
     try:
         # Fetch the web page content
         response = requests.get(url)
@@ -54,20 +61,10 @@ def extract_text_from_page(url: str) -> Dict:
                     table_data.append(row_data)
                 if current_heading:
                     page_structure[current_heading].append({'table': {'headers': headers, 'rows': table_data}})
+
+        logger.info(f"Extracted content from {url}: {json.dumps(page_structure, indent=4)}")
         
-        return page_structure
+        return ScrapedPage(url=url, content=page_structure)
     
     except requests.exceptions.RequestException as e:
         raise ScrapingError(f"Error occurred while trying to fetch {url}: {e}")
-
-def extract_structured_text_from_pages(url_list: List[str]) -> List[Dict]:
-    text_from_pages = []
-
-    for url in url_list:
-        try:
-            text_from_pages.append(extract_text_from_page(url))
-        except ScrapingError as e:
-            logger.error(e)
-            text_from_pages.append({})
-
-    return [extract_text_from_page(url) for url in url_list]

@@ -9,6 +9,9 @@ requests = "*"
 langchain = "*"
 langgraph = "*"
 langchain-aws = "*"
+click = "*"
+boto3 = "*"
+botocore = "*"
 
 [dev-packages]
 

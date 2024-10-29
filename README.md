@@ -14,7 +14,7 @@ python3 -m venv venv
 source venv/bin/activate
 
 (cd lp04 && pipenv sync --dev)
-python3 ./lp04/testing.py
+python3 ./lp04/gen_summary.py --urls "https://opensearch.org/docs/2.17/api-reference/index-apis/create-index/" --output "../generated_summary.md"
 ```
 
 ### Dependencies
