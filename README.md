@@ -1,6 +1,6 @@
 # LP04
 
-This package contains some prototype code to learn more about creating summarized extracts of reference documentation that be provide grounded knowledge for LLM inference
+This package contains some prototype code to learn more about creating summarized extracts of reference documentation that be provide grounded knowledge for LLM inference.  It uses Beautiful Soup and LangChain to extract the text from a web page, convert it to markdown, and summarize/compress the contents.  Particularly large web pages are likely to break the tool, as the Bedrock inference API has a maximum output of 4096 tokens.
 
 ### Running the code
 
@@ -14,7 +14,7 @@ python3 -m venv venv
 source venv/bin/activate
 
 (cd lp04 && pipenv sync --dev)
-python3 ./lp04/gen_summary.py --urls "https://opensearch.org/docs/2.17/api-reference/index-apis/create-index/" --output "../generated_summary.md"
+python3 ./lp04/gen_summary.py --url "https://opensearch.org/docs/2.17/api-reference/index-apis/create-index/" --output "../generated_summary.md"
 ```
 
 ### Dependencies

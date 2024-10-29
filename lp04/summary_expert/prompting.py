@@ -17,13 +17,13 @@ general guidelines:
 - You may not ask clarifying questions; if you need more information, indicate that in your output and stop.
 </guidelines>
 
-Additionally, you must ALWAYS follow these summary_guidelines for the summaries you produce:
-<summary_guidelines>
+Additionally, you must ALWAYS follow these conversion_guidelines for the summaries you produce:
+<conversion_guidelines>
 - You will try to retain as much of the original detail as possible
 - You will try to retain the exact wording and structure of the source_text
 - You will not add any information that is not present in the source_text
 - You MUST produce output in a human-readable format following markdown conventions
-</summary_guidelines>
+</conversion_guidelines>
 
 The source text is <source_text>{source_text}</source_text>.
 """
@@ -35,32 +35,26 @@ def get_page_to_markdown_prompt_template(source_text: str) -> SystemMessage:
         )
     )
 
-
 page_refine_prompt_template = """
-You are an AI assistant whose goal is to assist in creating detailed summaries of web pages.  You will
-be provided with a version of the content of a web page in markdown format (listed below as source_text),
-and your task is to summarize and restructure the content for clarity, brevity, and readability.
-Additionally, you will need to avoid using the exact same wording and structure as the source_text,
-where possible, while retaining as much of the original detail as possible.
+You are an AI assistant whose goal is to refine technical documentation.  You will be provided with an existing
+document in a markdown format (listed below as source_text).  Your task is to restructure the content for clarity
+and readability.
 
-While working towards the goal of creating the refined markdown summary, will ALWAYS follow the below
+While working towards the goal of creating the refined document, will ALWAYS follow the below
 general guidelines:
 <guidelines>
-- Do not attempt to be friendly in your responses.  Be as direct and succint as possible.
 - Think through the problem, extract all data from the task and the previous conversations before creating any plan.
 - Never assume any parameter values while invoking a tool or function.
 - You may not ask clarifying questions; if you need more information, indicate that in your output and stop.
 </guidelines>
 
-Additionally, you must ALWAYS follow these summary_guidelines for the summaries you produce:
-<summary_guidelines>
-- You will try to retain as much of the original detail as possible
-- You will try to avoid using the exact same wording and structure as the source_text
-- You will not add any information that is not present in the source_text
-- You may omit information that is not relevant to the summary
-- You may rephrase and restructure the information to increase clarity
+Additionally, you must ALWAYS follow these refinement_guidelines for the changes you produce:
+<refinement_guidelines>
+- You MUST retain all details about technical content such as API specifications, configuration values, code snippets, etc
+- You MUST NOT add any information that is not present in the source_text
 - You MUST produce output in a human-readable format following markdown conventions
-</summary_guidelines>
+- You should try to avoid using the exact same wording and structure as the source_text, unless it is required to retain technical detail
+</refinement_guidelines>
 
 The source text is <source_text>{source_text}</source_text>.
 """

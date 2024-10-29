@@ -11,10 +11,10 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "--urls",
-                "https://opensearch.org/docs/2.17/api-reference/index-apis/create-index/",
+                "--url",
+                "https://opensearch.org/docs/2.17/install-and-configure/configuring-opensearch/index-settings/",
                 "--output",
-                "'../generated_summary.md'"
+                "/tmp/generated_summary.md"
             ]
         }
     ]

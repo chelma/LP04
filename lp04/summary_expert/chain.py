@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass
 import json
 import logging
@@ -5,7 +6,7 @@ from typing import Any, Dict, List
 
 from botocore.config import Config
 from langchain_aws import ChatBedrockConverse
-from langchain_core.messages import BaseMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 
 from summary_expert.prompting import get_page_to_markdown_prompt_template, get_page_refine_prompt_template
 from summary_expert.tools import TOOLS_CONVERSION, TOOLS_REFINEMENT, store_converted_page_tool, store_refined_page_summary_tool
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 config = Config(
     read_timeout=120, # Wait 2 minutes for a response from the LLM
     retries={
-        'max_attempts': 10,  # Increase the number of retry attempts
+        'max_attempts': 20,  # Increase the number of retry attempts
         'mode': 'adaptive'   # Use adaptive retry strategy for better throttling handling
     }
 )
@@ -65,6 +66,10 @@ class SummarizationPassBatch:
         return {
             "sections": [pass_.to_json() for pass_ in self.passes]
         }
+    
+async def perform_async_inference(batched_context: List[List[BaseMessage]], llm: ChatBedrockConverse) -> List[BaseMessage]:
+    async_responses = [llm.ainvoke(turns) for turns in batched_context]
+    return await asyncio.gather(*async_responses)
 
 def perform_initial_conversion_batched(scraped_page: ScrapedPage) -> SummarizationPassBatch:
     # Create the inference context for each section of the page
@@ -83,10 +88,14 @@ def perform_initial_conversion_batched(scraped_page: ScrapedPage) -> Summarizati
     # Ideally, we'd use a batched call here, but Bedrock's approach to that is an asynchronous process that writes
     # the results to S3 and returns a URL to the results.  This is not implemented by default in the ChatBedrockConverse
     # class, so we'll skip batch processing for now.
+    #
+    # We will use asyncio to perform the inference in parallel asynchronously, however.  We do this by lumping the
+    # sections into groups which we run together, and then grab the next group of sections to run, and so on.
     response_batched = []
-    for section_turns in batched_context:
-        response = llm_convert_w_tools.invoke(section_turns)
-        response_batched.append(response)
+    group_size = 3
+    for i in range(0, len(batched_context), group_size):
+        section_group = batched_context[i:i + group_size]
+        response_batched.extend(asyncio.run(perform_async_inference(section_group, llm_convert_w_tools)))
 
     # Process the results of the batched conversion
     conversion_passes = []
@@ -167,3 +176,76 @@ def perform_initial_refinement_batch(url: str, sections: List[str]) -> Summariza
         )
 
     return SummarizationPassBatch(passes=conversion_passes)
+
+
+def perform_initial_refinement(initial_state: SummarizationPass) -> SummarizationPass:
+    # Define the initial task for the summary Agent
+    refinement_turns = initial_state.turns
+
+    refinement_turns.append(
+        get_page_refine_prompt_template(initial_state.text)
+    )
+    refinement_turns.append(
+        HumanMessage(content="Please refine the source text and store it.")
+    )
+
+    # Execute the initial conversion
+    response = llm_refine_w_tools.invoke(refinement_turns)
+    refinement_turns.append(response)
+
+    # Execute the tool call to conform to the ReAct format specification
+    tool_call = response.tool_calls[-1]
+    refined_text = store_refined_page_summary_tool(tool_call["args"]) # Currently a no-op
+    refinement_turns.append(
+        ToolMessage(
+            name="StoreRefinedPageSummary",
+            content="Stored the refined text",
+            tool_call_id=tool_call["id"]
+        )
+    )
+
+    return SummarizationPass(
+        url=initial_state.url,
+        text=refined_text,
+        turns=refinement_turns
+    )
+
+def perform_refinement_qc(previous_pass: SummarizationPass) -> SummarizationPass:
+    # Add the QC task to the turns
+    qc_turns = previous_pass.turns
+
+    qc_turns.append(
+        AIMessage(
+            content=(
+                "I stored the refined_text.  A copy of the refined_text is pasted below.  I will review it carefully and ensure that the following criteria are met:"
+                + "\n* The text follows markdown conventions"
+                + "\n* No technical details were lost from the source text in the refinement process"
+                + "\n\nAfter performing this review, I will store the updated, refined text."
+                + f"\n\n<refined_text>{previous_pass.text}<\\refined_text>"
+            )
+        )
+    )
+    qc_turns.append(
+        HumanMessage(content="Please review the refined text and store it.")
+    )
+
+    # Execute the QC pass on conversion
+    response = llm_refine_w_tools.invoke(qc_turns)
+    qc_turns.append(response)
+
+    # Execute the tool call to conform to the ReAct format specification
+    tool_call = response.tool_calls[-1]
+    refined_text = store_refined_page_summary_tool(tool_call["args"]) # Currently a no-op
+    qc_turns.append(
+        ToolMessage(
+            name="StoreRefinedPageSummary",
+            content="Stored the refined text",
+            tool_call_id=tool_call["id"]
+        )
+    )
+
+    return SummarizationPass(
+        url=previous_pass.url,
+        text=refined_text,
+        turns=qc_turns
+    )
