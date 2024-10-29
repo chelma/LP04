@@ -25,5 +25,5 @@ summarize_state = SummarizePageState(
 )
 final_state = SUMMARIZE_GRAPH_RUNNER(summarize_state, 42)
 logger.info(f"Final state: {summarize_page_state_to_json(final_state)}")
-logger.info(f"Converted Text: {final_state['converted_page']}")
-# logger.info(f"Refined Text: {final_state['refined_page']}")
+# logger.info(f"Converted Text: {final_state['converted_page']}")
+logger.info(f"Refined Text: {final_state['refined_page']}")

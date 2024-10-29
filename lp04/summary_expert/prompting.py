@@ -67,7 +67,7 @@ The source text is <source_text>{source_text}</source_text>.
 
 def get_page_summary_prompt_template(source_text: Dict[str, Any]) -> str:
     return SystemMessage(
-        content=get_page_summary_prompt_template.format(
+        content=page_summary_prompt_template.format(
             source_text=json.dumps(source_text, indent=4)
         )
     )

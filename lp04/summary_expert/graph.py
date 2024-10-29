@@ -48,14 +48,18 @@ class SummarizePageState(TypedDict):
 
     # Flags used to constrol the flow of the graph
     convert_complete: bool
-    refine_complete: bool
+    refine_1st_complete: bool
+    refine_2nd_complete: bool
 
 def summarize_page_state_to_json(state: SummarizePageState) -> Dict[str, Any]:
     return {
         "raw_page": state.get("raw_page", {}),
+        "convert_complete": state.get("convert_complete", False),
         "converted_page": state.get("converted_page", ""),
-        "refined_page": state.get("refined_page", ""),
         "convert_turns": [turn.to_json() for turn in state.get("convert_turns", [])],
+        "refine_1st_complete": state.get("refine_1st_complete", False),
+        "refine_2nd_complete": state.get("refine_2nd_complete", False),
+        "refined_page": state.get("refined_page", ""),
         "refine_turns": [turn.to_json() for turn in state.get("refine_turns", [])]
     }
     
@@ -98,10 +102,10 @@ def node_validate_starting_state(state: SummarizePageState):
         raise InvalidStateError("State 'convert_turns' and 'refine_turns' must be empty.")
     
     # Ensure the completion flags are set to False
-    if state.get("convert_complete", False) or state.get("refine_complete", False):
-        raise InvalidStateError("State 'convert_complete' and 'refine_complete' must be False.")
+    if state.get("convert_complete", False) or state.get("refine_1st_complete", False) or state.get("refine_2nd_complete", False):
+        raise InvalidStateError("State 'convert_complete', 'refine_1st_complete', and 'refine_2nd_complete' must be False.")
 
-    return {"convert_turns": [], "refine_turns": [], "convert_complete": False, "refine_complete": False}
+    return {"convert_turns": [], "refine_turns": [], "convert_complete": False, "refine_1st_complete": False, "refine_2nd_complete": False}
 
 @trace_summarize_node
 def node_invoke_llm_convert_initial(state: SummarizePageState) -> Dict[str, any]:
@@ -131,9 +135,9 @@ def node_invoke_llm_convert_2nd_pass(state: SummarizePageState) -> Dict[str, any
         AIMessage(
             content=(
                 "I stored the converted text.  A copy of the converted text is pasted below.  I will review it carefully and ensure that the following criteria are met:"
-                + "\n* The text is follows markdown conventions"
-                + "\n* The no important details were lost from the source text in the conversion"
-                + "\n\nAfter performing this review, please store the updated, converted text."
+                + "\n* The text follows markdown conventions"
+                + "\n* No important details were lost from the source text in the conversion"
+                + "\n\nAfter performing this review, I will store the updated, converted text."
                 + f"\n\n<converted_text>{state['converted_page']}<\\converted_text>"
             )
         )
@@ -150,9 +154,55 @@ def node_invoke_llm_convert_2nd_pass(state: SummarizePageState) -> Dict[str, any
     return {"convert_turns": new_turns, "convert_complete": True}
 
 @trace_summarize_node
-def node_store_text(state: SummarizePageState) -> Dict[str, any]:
+def node_invoke_llm_refine_initial(state: SummarizePageState) -> Dict[str, any]:
     """
-    Node to store the converted or refined text
+    Node to perform refine the generated markdown text
+    """
+    refine_turns = state["refine_turns"]
+    refine_turns.append(
+        get_page_summary_prompt_template(state["converted_page"])
+    )
+    refine_turns.append(
+        HumanMessage(content="Please refine the source text and store it.")
+    )
+
+    response = llm_refine_w_tools.invoke(refine_turns)
+    refine_turns.append(response)
+
+    return {"refine_turns": refine_turns, "refine_1st_complete": True}
+
+@trace_summarize_node
+def node_invoke_llm_refine_2nd_pass(state: SummarizePageState) -> Dict[str, any]:
+    """
+    Node to perform a second pass on the refining the markdown text for quality control
+    """
+    new_turns = []
+    new_turns.append(
+        AIMessage(
+            content=(
+                "I stored the refined text.  A copy of the refined text is pasted below.  I will review it carefully and ensure that the following criteria are met:"
+                + "\n* The text follows markdown conventions"
+                + "\n* No important details were lost from the source text in the refinement"
+                + "\n\nAfter performing this review, I will store the updated, refined text."
+                + f"\n\n<refined_text>{state["refined_page"]}<\\refined_text>"
+            )
+        )
+    )
+    new_turns.append(
+        HumanMessage(content="Please review the refined text and store it.")
+    )
+
+    all_turns = state["refine_turns"] + new_turns
+
+    response = llm_refine_w_tools.invoke(all_turns)
+    new_turns.append(response)
+
+    return {"refine_turns": new_turns, "refine_2nd_complete": True}
+
+@trace_summarize_node
+def node_store_text_convert(state: SummarizePageState) -> Dict[str, any]:
+    """
+    Node to store the converted text
     """
     outcome = {}
     tool_call = state["convert_turns"][-1].tool_calls[-1]
@@ -169,8 +219,21 @@ def node_store_text(state: SummarizePageState) -> Dict[str, any]:
             )
         ]
 
+    else:
+        raise ValueError(f"Unexpected tool call name: {tool_call['name']}")
+
+    return outcome
+
+@trace_summarize_node
+def node_store_text_refine(state: SummarizePageState) -> Dict[str, any]:
+    """
+    Node to store the refined text
+    """
+    outcome = {}
+    tool_call = state["refine_turns"][-1].tool_calls[-1]
+
     # We're storing the refined text
-    elif tool_call["name"] == "StoreRefinedPageSummary":
+    if tool_call["name"] == "StoreRefinedPageSummary":
         text = store_refined_page_summary_tool(tool_call["args"])
         outcome["refined_page"] = text
         outcome["refine_turns"] = [
@@ -189,28 +252,35 @@ def node_store_text(state: SummarizePageState) -> Dict[str, any]:
 summarize_page_graph.add_node("node_validate_starting_state", node_validate_starting_state)
 summarize_page_graph.add_node("node_invoke_llm_convert_initial", node_invoke_llm_convert_initial)
 summarize_page_graph.add_node("node_invoke_llm_convert_2nd_pass", node_invoke_llm_convert_2nd_pass)
-summarize_page_graph.add_node("node_store_text", node_store_text)
+summarize_page_graph.add_node("node_invoke_llm_refine_initial", node_invoke_llm_refine_initial)
+summarize_page_graph.add_node("node_invoke_llm_refine_2nd_pass", node_invoke_llm_refine_2nd_pass)
+summarize_page_graph.add_node("node_store_text_convert", node_store_text_convert)
+summarize_page_graph.add_node("node_store_text_refine", node_store_text_refine)
 
 # Define our graph edges
 
-def next_node(state: SummarizePageState) -> Literal["node_invoke_llm_convert_2nd_pass", END]:
+def next_node(state: SummarizePageState) -> Literal[
+            "node_invoke_llm_convert_2nd_pass", "node_invoke_llm_refine_initial", "node_invoke_llm_refine_2nd_pass", END
+        ]:
     if not state["convert_complete"]:
-        convert_turns = state["convert_turns"]
-        last_message = convert_turns[-1]
-        tool_name = last_message.name
-
-        if tool_name == "StoreConvertedPage":
-            return "node_invoke_llm_convert_2nd_pass"
-        else:
-            raise ValueError(f"Unexpected tool call {tool_name} in convert_turns")
+        return "node_invoke_llm_convert_2nd_pass"
+        
+    if state["convert_complete"] and not state["refine_1st_complete"]:
+        return "node_invoke_llm_refine_initial"
+    
+    if state["convert_complete"] and not state["refine_2nd_complete"]:
+        return "node_invoke_llm_refine_2nd_pass"
     
     return END
 
 summarize_page_graph.add_edge(START, "node_validate_starting_state")
 summarize_page_graph.add_edge("node_validate_starting_state", "node_invoke_llm_convert_initial")
-summarize_page_graph.add_edge("node_invoke_llm_convert_initial", "node_store_text")
-summarize_page_graph.add_edge("node_invoke_llm_convert_2nd_pass", "node_store_text")
-summarize_page_graph.add_conditional_edges("node_store_text", next_node)
+summarize_page_graph.add_edge("node_invoke_llm_convert_initial", "node_store_text_convert")
+summarize_page_graph.add_edge("node_invoke_llm_convert_2nd_pass", "node_store_text_convert")
+summarize_page_graph.add_edge("node_invoke_llm_refine_initial", "node_store_text_refine")
+summarize_page_graph.add_edge("node_invoke_llm_refine_2nd_pass", "node_store_text_refine")
+summarize_page_graph.add_conditional_edges("node_store_text_convert", next_node)
+summarize_page_graph.add_conditional_edges("node_store_text_refine", next_node)
 
 # Finally, compile the graph into a LangChain Runnable
 SUMMARIZE_GRAPH = summarize_page_graph.compile(checkpointer=checkpointer)
