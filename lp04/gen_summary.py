@@ -3,7 +3,7 @@ import logging
 
 import click
 
-from summary_expert.chain import perform_initial_conversion_batched, perform_initial_refinement, perform_refinement_qc, SummarizationPass
+from summary_expert.chain import perform_initial_conversion_batched, perform_initial_refinement, perform_quality_control, SummarizationPass
 from utilities.logging import configure_logging
 from utilities.scraping import extract_text_from_page
 
@@ -41,10 +41,10 @@ def main(url, output):
     pass_results = perform_initial_refinement(initial_state_refinement)
     logger.debug(f"Refinement results: {pass_results.to_json()}")
 
-    # 2nd pass on refining the markdown summaries for quality control
-    logger.info(f"2nd pass on refining page: {scraped_page.url}")
-    pass_results = perform_refinement_qc(initial_state_refinement)
-    logger.debug(f"Refinement results: {pass_results.to_json()}")
+    # Quality control pass on refined the markdown summary
+    logger.info(f"Quality control pass on refined page: {scraped_page.url}")
+    pass_results = perform_quality_control(converted_text, pass_results.text, scraped_page.url)
+    logger.debug(f"QC pass results: {pass_results.to_json()}")
 
     logger.info(f"Summary completed for page: {scraped_page.url}")
     logger.info(f"Final refined text: \n{pass_results.text}")

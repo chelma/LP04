@@ -8,7 +8,7 @@ from botocore.config import Config
 from langchain_aws import ChatBedrockConverse
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 
-from summary_expert.prompting import get_page_to_markdown_prompt_template, get_page_refine_prompt_template
+from summary_expert.prompting import get_page_to_markdown_prompt_template, get_page_refine_prompt_template, get_page_qc_prompt_template
 from summary_expert.tools import TOOLS_CONVERSION, TOOLS_REFINEMENT, store_converted_page_tool, store_refined_page_summary_tool
 from utilities.scraping import ScrapedPage
 
@@ -210,23 +210,15 @@ def perform_initial_refinement(initial_state: SummarizationPass) -> Summarizatio
         turns=refinement_turns
     )
 
-def perform_refinement_qc(previous_pass: SummarizationPass) -> SummarizationPass:
+def perform_quality_control(original_doc: str, refined_doc: str, url: str) -> SummarizationPass:
     # Add the QC task to the turns
-    qc_turns = previous_pass.turns
+    qc_turns = []
 
     qc_turns.append(
-        AIMessage(
-            content=(
-                "I stored the refined_text.  A copy of the refined_text is pasted below.  I will review it carefully and ensure that the following criteria are met:"
-                + "\n* The text follows markdown conventions"
-                + "\n* No technical details were lost from the source text in the refinement process"
-                + "\n\nAfter performing this review, I will store the updated, refined text."
-                + f"\n\n<refined_text>{previous_pass.text}<\\refined_text>"
-            )
-        )
+        get_page_qc_prompt_template(original_doc, refined_doc)
     )
     qc_turns.append(
-        HumanMessage(content="Please review the refined text and store it.")
+        HumanMessage(content="Please perform a quality control pass on the refined doc and store it.")
     )
 
     # Execute the QC pass on conversion
@@ -245,7 +237,7 @@ def perform_refinement_qc(previous_pass: SummarizationPass) -> SummarizationPass
     )
 
     return SummarizationPass(
-        url=previous_pass.url,
+        url=url,
         text=refined_text,
         turns=qc_turns
     )

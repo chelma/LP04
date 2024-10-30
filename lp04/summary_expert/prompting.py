@@ -65,3 +65,40 @@ def get_page_refine_prompt_template(source_text: Dict[str, Any]) -> SystemMessag
             source_text=json.dumps(source_text, indent=4)
         )
     )
+
+page_qc_prompt_template = """
+You are an AI assistant whose goal is to refine technical documentation as part of a multi-step process.  The previous
+step in the process refined the documentation for clarity and readability.  You task is perform final quality control
+on the refined document before it is ready for publishing.
+
+You will be provided the original, unrefined document (listed below as source_text) and the refined document (listed
+below as refined_text).  Both should be in markdown format.  Your task is to carefully review the source_text and
+refined_text and produce an updated version of the refined_text that meets the following quality_control_guidelines:
+
+<quality_control_guidelines>
+- Retain the style and structure of the refined_text
+- If you find technical details present in the source_text but missing from the refined_text, add them back in.
+    By technical details, we mean API specifications, configuration values and options, code snippets, etc
+- Do not add any information that is not present in the source_text
+- Ensure the final output follows markdown conventions
+</quality_control_guidelines>
+
+While working towards the goal of producing a final, will ALWAYS follow the below general guidelines:
+<guidelines>
+- Think through the problem, extract all data from the task and the previous conversations before creating any plan.
+- Never assume any parameter values while invoking a tool or function.
+- You may not ask clarifying questions; if you need more information, indicate that in your output and stop.
+</guidelines>
+
+The source text is <source_text>{source_text}</source_text>.
+
+The refined text is <refined_text>{refined_text}</refined_text>.
+"""
+
+def get_page_qc_prompt_template(source_text: str, refined_text: str) -> SystemMessage:
+    return SystemMessage(
+        content=page_qc_prompt_template.format(
+            source_text=source_text,
+            refined_text=refined_text
+        )
+    )
